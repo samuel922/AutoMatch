@@ -7,20 +7,279 @@ generator client {
   provider = "prisma-client-js"
 }
 
+enum UserType {
+  buyer
+  seller
+}
+
+enum BusinessType {
+  individual
+  broker
+  enterprise
+}
+
+enum VolumeTier {
+  standard
+  silver
+  gold
+  platinum
+}
+
+enum PayoutSchedule {
+  daily
+  weekly
+  net15 @map("net-15")
+}
+
+enum EventType {
+  sports
+  concert
+  theater
+  other
+}
+
+enum EventStatus {
+  upcoming
+  ongoing
+  completed
+  cancelled
+}
+
+enum ListingStatus {
+  draft
+  active
+  matched
+  sold
+  expired
+  cancelled
+}
+
+enum DeliveryMethod {
+  ticketmaster
+  axs
+  pdf
+  willcall
+  other
+}
+
+enum OfferStatus {
+  active
+  matched
+  expired
+  cancelled
+  completed
+}
+
+enum PaymentStatus {
+  pending
+  authorized
+  captured
+  failed
+  refunded
+}
+
+enum PayoutStatus {
+  pending
+  scheduled
+  processing
+  completed
+  failed
+}
+
+enum DeliveryStatus {
+  pending
+  transferred
+  confirmed
+  disputed
+  failed
+}
+
+enum EscrowStatus {
+  held
+  released
+  refunded
+}
+
 model User {
-  id                 String   @id @default(uuid())
-  email              String   @unique
-  password           String
-  userType           String   @default("buyer")
-  firstName          String?
-  lastName           String?
-  phone              String?
-  isActive           Boolean  @default(true)
-  isVerified         Boolean  @default(false)
-  verificationToken  String?
-  passwordResetToken String?
+  id                   String   @id @default(uuid())
+  email                String   @unique
+  password             String
+  userType             UserType @default(buyer)
+  firstName            String?
+  lastName             String?
+  phone                String?
+  dateOfBirth          DateTime?
+  addressStreet        String?
+  addressCity          String?
+  addressState         String?
+  addressZipCode       String?
+  businessName         String?
+  businessType         BusinessType?
+  volumeTier           VolumeTier? @default(standard)
+  feePercentage        Float?   @default(10)
+  stripeConnectAccountId String?
+  payoutSchedule       PayoutSchedule? @default(daily)
+  sellerVerified       Boolean? @default(false)
+  stripeCustomerId     String?
+  savedPaymentMethods  Json?
+  isActive             Boolean  @default(true)
+  isVerified           Boolean  @default(false)
+  verificationToken    String?
+  passwordResetToken   String?
   passwordResetExpires DateTime?
-  lastLogin          DateTime?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  trustScore           Int      @default(100)
+  flaggedForReview     Boolean  @default(false)
+  suspendedUntil       DateTime?
+  lastLogin            DateTime?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  BuyerOffer           BuyerOffer[]        @relation("BuyerOffers")
+  SellerListing        SellerListing[]     @relation("SellerListings")
+  TransactionsAsBuyer  Transaction[]       @relation("TransactionsBuyer")
+  TransactionsAsSeller Transaction[]       @relation("TransactionsSeller")
+}
+
+model Event {
+  id           String      @id @default(uuid())
+  externalId   String?
+  name         String
+  type         EventType
+  venueName    String?
+  venueAddress String?
+  venueCity    String?
+  venueState   String?
+  venueZipCode String?
+  latitude     Float?
+  longitude    Float?
+  dateTime     DateTime
+  sections     Json?
+  marketStats  Json?
+  status       EventStatus @default(upcoming)
+  imageUrl     String?
+  performers   String[]
+  category     String?
+  subCategory  String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  BuyerOffer    BuyerOffer[]
+  SellerListing SellerListing[]
+  Transaction   Transaction[]
+
+  @@index([dateTime, status])
+  @@index([venueCity, dateTime])
+}
+
+model SellerListing {
+  id                       String        @id @default(uuid())
+  sellerId                 String
+  eventId                  String
+  section                  String
+  row                      String?
+  seats                    String[]
+  quantity                 Int
+  askingPrice              Float?
+  minimumAcceptablePrice   Float?
+  isLive                   Boolean       @default(false)
+  goLiveAt                 DateTime?
+  autoSellEnabled          Boolean       @default(false)
+  autoSellTriggerTime      DateTime?
+  autoSellAcceptHighestOffer Boolean     @default(true)
+  status                   ListingStatus @default(draft)
+  externalListingId        String?
+  ticketmasterTransferId   String?
+  deliveryMethod           DeliveryMethod
+  deliveryDetails          Json?
+  viewCount                Int           @default(0)
+  offerCount               Int           @default(0)
+  createdAt                DateTime      @default(now())
+  updatedAt                DateTime      @updatedAt
+
+  seller        User        @relation("SellerListings", fields: [sellerId], references: [id])
+  event         Event       @relation(fields: [eventId], references: [id])
+  offers        BuyerOffer[] @relation("OfferListing")
+  transactions  Transaction[]
+
+  @@index([eventId, status, section])
+  @@index([sellerId, status])
+  @@index([goLiveAt, isLive])
+}
+
+model BuyerOffer {
+  id                    String      @id @default(uuid())
+  buyerId               String
+  eventId               String
+  sections              String[]
+  maxPrice              Float
+  quantity              Int        @default(1)
+  suggestedPrice        Float?
+  acceptanceProbability Float?
+  stripePaymentIntentId String?
+  paymentAmount         Float?
+  paymentStatus         PaymentStatus?
+  authorizedAt          DateTime?
+  status                OfferStatus @default(active)
+  matchedListingId      String?
+  matchedAt             DateTime?
+  expiresAt             DateTime
+  isFeatured            Boolean     @default(false)
+  featuredUntil         DateTime?
+  viewCount             Int         @default(0)
+  lastViewedBy          Json?
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+
+  buyer         User          @relation("BuyerOffers", fields: [buyerId], references: [id])
+  event         Event         @relation(fields: [eventId], references: [id])
+  matchedListing SellerListing? @relation("OfferListing", fields: [matchedListingId], references: [id])
+  transaction   Transaction?
+
+  @@index([eventId, status, maxPrice])
+  @@index([buyerId, status])
+}
+
+model Transaction {
+  id               String         @id @default(uuid())
+  buyerId          String
+  sellerId         String
+  buyerOfferId     String
+  sellerListingId  String?
+  eventId          String
+  quantity         Int?
+  section          String?
+  row              String?
+  seats            String[]
+  salePrice        Float
+  buyerPaid        Float?
+  sellerFee        Float?
+  sellerPayout     Float?
+  stripePaymentIntentId String?
+  stripeTransferId String?
+  paymentStatus    PaymentStatus  @default(pending)
+  payoutStatus     PayoutStatus   @default(pending)
+  deliveryStatus   DeliveryStatus @default(pending)
+  deliveryMethod   String?
+  transferredAt    DateTime?
+  confirmedAt      DateTime?
+  escrowReleaseDate DateTime?
+  escrowStatus     EscrowStatus   @default(held)
+  hasDispute       Boolean        @default(false)
+  disputeReason    String?
+  disputeResolution String?
+  notes            String?
+  adminNotes       String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  buyer         User          @relation("TransactionsBuyer", fields: [buyerId], references: [id])
+  seller        User          @relation("TransactionsSeller", fields: [sellerId], references: [id])
+  buyerOffer    BuyerOffer    @relation(fields: [buyerOfferId], references: [id])
+  sellerListing SellerListing? @relation(fields: [sellerListingId], references: [id])
+  event         Event         @relation(fields: [eventId], references: [id])
+
+  @@index([buyerId, createdAt])
+  @@index([sellerId, createdAt])
+  @@index([eventId, deliveryStatus])
+  @@index([payoutStatus, sellerId])
 }
